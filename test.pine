@@ -1,0 +1,49 @@
+//@version=5
+indicator(title='SMC Indicator', shorttitle='SMC Indicator', overlay=true)
+
+import ZenAndTheArtOfTrading/ZenLibrary/7 as ZenLibrary
+
+
+// Input parameters
+depth  = input.int(title="Depth", defval=10, minval=1, tooltip=depthTooltip)
+
+var relativeHigh = high[1]
+var relativeLow = low[1]
+var line higherBreakLine = na
+var line lowerBreakLine = na
+
+bool ll = false
+bool hh = false
+// Check weather candle is breakout in any direction
+if high > high[1] or low < low[1]
+    // check wether there is a lower low
+    if low< relativeLow
+        // Drawing lines with Candles for better visualization
+        if(na(lowerBreakLine))
+            lowerBreakLine = line.new(chart.point.from_index(bar_index - 1,low[1]),chart.point.from_index(bar_index,low[1])) 
+        else
+            lowerBreakLine.set_xy1(bar_index - 1,low[1])
+            lowerBreakLine.set_xy2(bar_index ,low[1])
+
+        relativeLow := low
+        ll := true
+    else if high>relativeHigh
+        // Drawing lines with Candles for better visualization
+        if(na(higherBreakLine))
+            higherBreakLine = line.new(chart.point.from_index(bar_index - 1,high[1]),chart.point.from_index(bar_index,high[1])) 
+        else
+            higherBreakLine.set_xy1(bar_index - 1,high[1])
+            higherBreakLine.set_xy2(bar_index ,high[1])
+
+        relativeHigh := high
+        hh := true
+
+// Calculate the channel boundaries
+
+plotchar( ll,"Lower Lows", "", color = color.new(color.red,100))
+plotchar( hh,"Higher Highs", "", color = color.new(color.green,100))
+plotchar( relativeHigh,"relativeHigh", "", color = color.new(color.red,100))
+plotchar( relativeLow,"relativeLow", "", color = color.new(color.green,100))
+
+// Plotting
+plot(na)

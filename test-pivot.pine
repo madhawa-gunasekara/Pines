@@ -1,0 +1,108 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © ZenAndTheArtOfTrading / PineScriptMastery.com
+// @version=5
+indicator("Pivot Points", overlay=true)
+
+// Get user input
+var devTooltip          = "Deviation is a multiplier that affects how much the price should deviate from the previous pivot in order for the bar to become a new pivot."
+var depthTooltip        = "The minimum number of bars that will be taken into account when analyzing pivots."
+threshold_multiplier    = input.float(title="Deviation", defval=2.5, minval=0, tooltip=devTooltip)
+depth                   = input.int(title="Depth", defval=10, minval=1, tooltip=depthTooltip)
+deleteLastLine          = input.bool(title="Delete Last Line", defval=false)
+bgcolorChange           = input.bool(title="Change BgColor", defval=false)
+
+// Calculate deviation threshold for identifying major swings
+dev_threshold = ta.atr(10) / close * 100 * threshold_multiplier
+
+// Prepare pivot variables
+var line lineLast = na
+var int iLast = 0 // Index last
+var int iPrev = 0 // Index previous
+var float pLast = 0 // Price last
+var isHighLast = false // If false then the last pivot was a pivot low
+
+// Custom function for detecting pivot points (and returning price + bar index)
+pivots(src, length, isHigh) =>
+    l2 = length * 2
+    c = nz(src[length])
+    ok = true
+    for i = 0 to l2
+        if isHigh and src[i] > c // If isHigh, validate pivot high
+            ok := false
+        if not isHigh and src[i] < c // If not isHigh, validate pivot low
+            ok := false
+    if ok // If pivot is valid, return bar index + high price value
+        [bar_index[length], c]
+    else // If pivot is invalid, return na
+        [int(na), float(na)]
+
+// Get bar index & price high/low for current pivots
+[iH, pH] = pivots(high, depth / 2, true)
+[iL, pL] = pivots(low, depth / 2, false)
+
+// Custom function for calculating price deviation for validating large moves
+calc_dev(base_price, price) => 100 * (price - base_price) / price
+
+// Custom function for detecting pivots that meet our deviation criteria
+pivotFound(dev, isHigh, index, price) =>
+    if isHighLast == isHigh and not na(lineLast) // Check bull/bear direction of new pivot
+        // New pivot in same direction as last (a pivot high), so update line upwards (ie. trend-continuation)
+        if isHighLast ? price > pLast : price < pLast // If new pivot is above last pivot, update line
+            line.set_xy2(lineLast, index, price)
+            [lineLast, isHighLast]
+        else
+            [line(na), bool(na)] // New pivot is not above last pivot, so don't update the line
+    else // Reverse the trend/pivot direction (or create the very first line if lineLast is na)
+        if math.abs(dev) > dev_threshold
+            // Price move is significant - create a new line between the pivot points
+            id = line.new(iLast, pLast, index, price, color=color.gray, width=1, style=line.style_dashed)
+            [id, isHigh]
+        else
+            [line(na), bool(na)]
+
+// If bar index for current pivot high is not NA (ie. we have a new pivot):
+if not na(iH)
+    dev = calc_dev(pLast, pH) // Calculate the deviation from last pivot
+    [id, isHigh] = pivotFound(dev, true, iH, pH) // Pass the current pivot high into pivotFound() for validation & line update
+    if not na(id) // If the line has been updated, update price & index values and delete previous line
+        if id != lineLast and deleteLastLine
+            line.delete(lineLast)
+        lineLast := id
+        isHighLast := isHigh
+        iPrev := iLast
+        iLast := iH
+        pLast := pH
+else 
+    if not na(iL) // If bar index for current pivot low is not NA (ie. we have a new pivot):
+        dev = calc_dev(pLast, pL) // Calculate the deviation from last pivot
+        [id, isHigh] = pivotFound(dev, false, iL, pL) // Pass the current pivot low into pivotFound() for validation & line update
+        if not na(id) // If the line has been updated, update price values and delete previous line
+            if id != lineLast and deleteLastLine
+                line.delete(lineLast)
+            lineLast := id
+            isHighLast := isHigh
+            iPrev := iLast
+            iLast := iL
+            pLast := pL
+
+// Get starting and ending high/low price of the current pivot line
+startIndex = line.get_x1(lineLast)
+startPrice = line.get_y1(lineLast)
+endIndex   = line.get_x2(lineLast)
+endPrice   = line.get_y2(lineLast)
+
+// Draw top & bottom of impulsive move
+topLine    = line.new(startIndex, startPrice, endIndex, startPrice, extend=extend.right, color=color.red)
+bottomline = line.new(startIndex, endPrice, endIndex, endPrice, extend=extend.right, color=color.green)
+line.delete(topLine[1])
+line.delete(bottomline[1])
+//plot(startPrice, color=color.green)
+//plot(endPrice, color=color.red)
+
+// Do what you like with these pivot values :)
+// Keep in mind there will be an X bar delay between pivot price values updating based on Depth setting
+dist = math.abs(startPrice - endPrice)
+plot(dist, color=color.new(color.purple,100))
+bullish = endPrice > startPrice
+offsetBG = -(depth / 2)
+bgcolor(bgcolorChange ? bullish ? color.new(color.green,90) : color.new(color.red,90) : na, offset=offsetBG)
